@@ -4,7 +4,7 @@
   "main": "src/index.js",
   "compatibility_date": "2026-11-06",
   "assets": { "directory": "./public", "binding": "ASSETS", "run_worker_first": ["/api/*"] },
-  "d1_databases": [{ "binding": "DB", "database_name": "atacado-seguro", "migrations_dir": "migrations" }],
+  "d1_databases": [{ "binding": "DB", "database_name": "atacado-seguro", "database_id": "aad73923-d1f1-4633-9c41-c0537ee739cb", "migrations_dir": "migrations" }],
   "triggers": { "crons": ["17 7 * * *"] },
   "observability": { "enabled": true, "traces": { "enabled": true } },
   "vars": { "ITERACOES_SENHA": "100000", "MODO_DEMO": "1" }
