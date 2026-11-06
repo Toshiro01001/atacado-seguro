@@ -3,6 +3,7 @@
 import { execFileSync } from 'node:child_process';
 import { createRequire } from 'node:module';
 import { mkdirSync } from 'node:fs';
+import { iniciarSiteverify } from './siteverify-falso.mjs';
 const require = createRequire(import.meta.url);
 const { chromium, devices } = require('playwright');
 const BASE = process.env.BASE || 'http://localhost:8787';
@@ -11,6 +12,8 @@ mkdirSync(SAI, { recursive: true });
 let ok = 0; const falhas = [];
 const c = (x, m) => { if (x) ok++; else falhas.push(m); };
 const ORI = { Origin: BASE };
+const sv = await iniciarSiteverify();
+const ficha = (p = 'ok') => `${p}-${Math.random().toString(36).slice(2)}${Date.now()}`;
 async function req(metodo, rota, { corpo, cookie, csrf, origem = true, tipo = 'application/json' } = {}) {
   const h = {};
   if (origem) Object.assign(h, ORI);
@@ -22,7 +25,7 @@ async function req(metodo, rota, { corpo, cookie, csrf, origem = true, tipo = 'a
   return { s: r.status, h: r.headers, j, t };
 }
 async function entrar(email, senha) {
-  const r = await req('POST', '/api/login', { corpo: { email, senha } });
+  const r = await req('POST', '/api/login', { corpo: { email, senha, turnstile: ficha() } });
   const sc = r.h.get('set-cookie') || '';
   return { ...r, cookie: sc.split(';')[0], sc, csrf: r.j && r.j.csrf };
 }
@@ -32,12 +35,37 @@ const sql = (q) => JSON.parse(execFileSync('npx', ['wrangler', 'd1', 'execute', 
 let r = await fetch(BASE + '/');
 for (const [k, v] of [['strict-transport-security', 'max-age'], ['x-frame-options', 'DENY'], ['x-content-type-options', 'nosniff'], ['content-security-policy', "frame-ancestors 'none'"], ['referrer-policy', 'no-referrer']]) c((r.headers.get(k) || '').includes(v), 'página sem ' + k);
 c(!(r.headers.get('content-security-policy') || '').includes('unsafe'), 'CSP frouxa');
+const csp = r.headers.get('content-security-policy') || '';
+c(/script-src 'self' https:\/\/challenges\.cloudflare\.com;/.test(csp) && /frame-src https:\/\/challenges\.cloudflare\.com;/.test(csp), 'CSP sem o Turnstile');
+c(!/script-src[^;]*\*/.test(csp), 'CSP com curinga');
 r = await req('GET', '/api/produtos');
 c(r.s === 200 && r.j.produtos.length === 8, 'catálogo');
 c(r.h.get('cache-control') === 'no-store' && (r.h.get('x-frame-options') === 'DENY'), 'API sem cabeçalhos');
 c((await req('GET', '/api/nada')).s === 404, 'rota 404');
 c((await req('GET', '/.dev.vars')).t.indexOf('PIMENTA') < 0, 'segredo exposto');
 c((await req('GET', '/src/index.js')).t.indexOf('PBKDF2') < 0, 'código do servidor exposto');
+
+/* Turnstile antes do login */
+r = await req('GET', '/api/sessao');
+c(r.s === 200 && r.j.turnstile === '1x00000000000000000000AA', 'sessão entrega a chave pública do Turnstile');
+const regAntes = sql("SELECT COUNT(*) n FROM registro_acesso")[0].n;
+const robo = (t) => req('POST', '/api/login', { corpo: { email: 'cliente@exemplo.com.br', senha: 'demonstracao-cliente', turnstile: t } });
+r = await req('POST', '/api/login', { corpo: { email: 'cliente@exemplo.com.br', senha: 'demonstracao-cliente' } });
+c(r.s === 403 && r.j.codigo === 'verificacao', 'login sem ficha do Turnstile ' + r.s);
+c((await robo('ruim-123')).s === 403, 'ficha inválida');
+c((await robo(ficha('acao'))).s === 403, 'ficha de outra ação');
+c((await robo(ficha('host'))).s === 403, 'ficha de outro endereço');
+c((await robo('x'.repeat(3000))).s === 403, 'ficha grande demais');
+r = await robo(ficha('quebra'));
+c(r.s === 503 && r.j.codigo === 'verificacao_fora', 'Siteverify fora do ar fecha o login ' + r.s);
+const repetida = ficha();
+c((await robo(repetida)).s === 200, 'ficha válida entra');
+c((await robo(repetida)).s === 403, 'ficha reaproveitada');
+c(sql("SELECT COUNT(*) n FROM registro_acesso")[0].n === regAntes + 1, 'robô recusado antes do banco');
+let semTrava = true;
+for (let i = 0; i < 14; i++) if ((await robo('ruim-' + i)).s !== 403) semTrava = false;
+c(semTrava, 'robô não gasta tentativas da conta');
+c(sv.pedidos.some((x) => x.ficha.startsWith('ok-')), 'servidor consultou o Siteverify');
 
 /* login */
 r = await entrar('cliente@exemplo.com.br', 'errada');
@@ -115,12 +143,18 @@ sql("UPDATE usuarios SET documento_cifrado=NULL WHERE email='outra.loja@exemplo.
 const b = await chromium.launch();
 for (const [nome, ctx] of [['computador', { viewport: { width: 1366, height: 800 } }], ['celular', { ...devices['iPhone 13'] }], ['p320', { viewport: { width: 320, height: 640 }, isMobile: true, hasTouch: true }]]) {
   const C = await b.newContext({ ...ctx, locale: 'pt-BR', reducedMotion: 'reduce', timezoneId: 'America/Cuiaba' });
+  await C.route(/challenges\.cloudflare\.com\/turnstile\/v0\/api\.js/, (rt) => {
+    const cb = new URL(rt.request().url()).searchParams.get('onload');
+    rt.fulfill({ contentType: 'text/javascript', body: `window.turnstile={render:function(s,o){window.__o=o;var e=document.querySelector(s);var d=document.createElement('div');d.style.cssText='width:300px;max-width:100%;height:65px;border:1px solid #ccc';e.appendChild(d);setTimeout(function(){o.callback('ok-'+Math.random().toString(36).slice(2))},30);return 'w1'},reset:function(){setTimeout(function(){window.__o.callback('ok-'+Math.random().toString(36).slice(2))},30)}};window['${cb}']();` });
+  });
   const p = await C.newPage(); const er = [];
   p.on('pageerror', (e) => er.push(e.message));
   p.on('console', (m) => { if (m.type() === 'error' && !/status of 4\d\d/.test(m.text())) er.push(m.text()); });
   await p.goto(BASE + '/');
   await p.waitForSelector('#produtos tr');
   c(await p.isDisabled('#enviar'), nome + ' enviar desligado sem login');
+  await p.waitForFunction(() => document.querySelector('#verificacao div') && !document.getElementById('m-robo').textContent);
+  c(true, nome + ' widget do Turnstile');
   await p.click('.atalhos [data-s="demonstracao-cliente"]');
   await p.waitForSelector('#logado:not([hidden])');
   await p.locator('#produtos input').first().fill('2');
@@ -142,6 +176,10 @@ for (const [nome, ctx] of [['computador', { viewport: { width: 1366, height: 800
   c(true, 'sessão mantida');
   if (nome !== 'p320') await p.screenshot({ path: `${SAI}/cliente-${nome}.png`, fullPage: true });
   await p.click('#sair'); await p.waitForSelector('#f-login:not([hidden])');
+  c(await p.isVisible('#verificacao'), nome + ' widget volta depois de sair');
+  await p.fill('#email', 'cliente@exemplo.com.br'); await p.fill('#senha', 'errada'); await p.click('#f-login button');
+  await p.waitForFunction(() => document.getElementById('e-login').textContent.includes('incorretos'));
+  await p.waitForTimeout(120);
   await p.click('.atalhos [data-s="demonstracao-gestor"]');
   await p.waitForSelector('#s-registro:not([hidden])');
   await p.waitForSelector('#registro tr');
@@ -172,6 +210,20 @@ c(r.status === 404 && (await r.text()).includes('Página não encontrada'), 'pá
 r = await fetch(BASE + '/favicon.svg'); c(r.status === 200, 'favicon');
 r = await fetch(BASE + '/og.png'); c(r.status === 200, 'imagem de compartilhamento');
 
+/* sem a chave secreta do Turnstile: login fecha, o resto abre */
+const B2 = process.env.BASE_SEM_TURNSTILE;
+c(Boolean(B2), 'faltou BASE_SEM_TURNSTILE para testar o servidor sem chave');
+if (B2) {
+  const o2 = { Origin: B2, 'Content-Type': 'application/json' };
+  const g = async (rota) => { const x = await fetch(B2 + rota); return { s: x.status, j: await x.json().catch(() => null) }; };
+  c((await g('/api/saude')).s === 200, 'sem chave: saúde');
+  const pr = await g('/api/produtos'); c(pr.s === 200 && pr.j.produtos.length === 8, 'sem chave: catálogo');
+  const se = await g('/api/sessao'); c(se.s === 200 && se.j.turnstile === null, 'sem chave: sessão sem Turnstile');
+  const lg = await fetch(B2 + '/api/login', { method: 'POST', headers: o2, body: JSON.stringify({ email: 'cliente@exemplo.com.br', senha: 'demonstracao-cliente', turnstile: ficha() }) });
+  const lj = await lg.json();
+  c(lg.status === 503 && lj.codigo === 'configuracao' && lj.erro.includes('robôs'), 'sem chave: login recusado ' + lg.status);
+}
+
 /* faxina pelo agendamento */
 r = await fetch(BASE + '/__scheduled?cron=17+7+*+*+*');
 c(r.status === 200, 'faxina respondeu');
@@ -184,6 +236,7 @@ let bloqueou = false;
 for (let i = 0; i < 14 && !bloqueou; i++) bloqueou = (await entrar('gestor@exemplo.com.br', 'palpite' + i)).s === 429;
 c(bloqueou, 'força bruta não bloqueou');
 
+sv.srv.close();
 console.log(`conferências ok: ${ok}, falhas: ${falhas.length}`);
 falhas.forEach((f) => console.log(' -', String(f).slice(0, 240)));
 process.exit(falhas.length ? 1 : 0);

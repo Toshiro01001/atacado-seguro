@@ -118,3 +118,10 @@ tr.marcado td{background:#fdf3d8}
 }
 @media (max-width:520px){.pontos{grid-template-columns:minmax(0,1fr)}}
 @media (prefers-reduced-motion:reduce){html{scroll-behavior:auto}}
+
+/* proteção contra robôs (Turnstile) */
+.robo{margin-top:.8rem}
+.verificacao{min-height:65px}
+.verificacao[hidden]{display:none}
+.nota-robo{font-size:.9rem;margin-top:.3rem;color:var(--tinta)}
+.nota-robo:empty{display:none}

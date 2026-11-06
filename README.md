@@ -25,6 +25,8 @@ Fiz esta demonstração para mostrar um sistema de atacado com servidor de verda
 | Registro de acesso | Logins, negativas e mudanças, sem senhas e com o IP em hash, por 30 dias |
 | Cópia de segurança | Time Travel do D1 e `scripts/backup.sh` para exportar |
 | Cabeçalhos | HSTS, CSP, `frame-ancestors`, X-Frame-Options, Permissions-Policy e outros em `public/_headers` e na API |
+| Proteção contra robôs | Turnstile da Cloudflare no login. O servidor confere a ficha no Siteverify, com a ação e o endereço esperados, antes de tocar no banco ou derivar a senha. Sem a chave secreta, o login fica fechado |
+| Monitoramento de erros | Sentry no Worker, só com erros e 10% dos rastros. Antes de enviar, tiro cookies, cabeçalhos de sessão e CSRF, corpo da requisição (onde vai a senha), parâmetros e IP |
 | Pedidos simultâneos | O número do pedido nasce dentro da transação, então vários pedidos ao mesmo tempo não se atrapalham |
 
 ## Limitações conhecidas
@@ -33,22 +35,28 @@ Fiz esta demonstração para mostrar um sistema de atacado com servidor de verda
 - O plano gratuito limita o tempo de CPU por requisição, e o login pode exceder esse limite. Um sistema real deve usar o plano pago.
 - As contas de demonstração têm senhas públicas. Não reutilize este arquivo de contas.
 - Não houve teste de invasão independente.
+- Os erros vão para o Sentry, em servidor fora do Brasil. Os dados desta demonstração são fictícios. Em sistema de cliente, isso precisa constar na política de privacidade.
 
 ## Como rodar
 
 ```sh
 npm install
-# crie .dev.vars com PIMENTA e CHAVE_DADOS, cada uma com 32 bytes em base64
+# crie .dev.vars com PIMENTA e CHAVE_DADOS (32 bytes em base64 cada) e as chaves de teste do Turnstile:
+# TURNSTILE_SITEKEY=1x00000000000000000000AA
+# TURNSTILE_SECRET=1x0000000000000000000000000000000AA
+# TURNSTILE_HOSTNAMES=localhost
+# TURNSTILE_URL=http://127.0.0.1:8788/siteverify
+# SENTRY_DSN=
 npm run banco:local
 npm run dev
 ```
 
-Testes: com o servidor local no ar, `BASE=http://localhost:8787 npm run testar`. Precisam de Playwright e axe-core instalados.
+Testes: suba dois servidores locais, um normal e um sem a chave do Turnstile (`npx wrangler dev --port 8789 --inspector-port 9330 --var TURNSTILE_SECRET:`), e rode `BASE=http://localhost:8787 BASE_SEM_TURNSTILE=http://127.0.0.1:8789 npm run testar`. O teste sobe um Siteverify de mentira na porta 8788, porque o ambiente de teste não alcança a Cloudflare. Precisam de Playwright e axe-core instalados.
 
 ## Como publicar
 
 Cada envio na `main` publica pelo Workers Builds da Cloudflare, com `npx wrangler d1 migrations apply atacado-seguro --remote` na compilação e `npx wrangler deploy` na publicação.
 
-Para outra conta: crie o banco D1 `atacado-seguro`, coloque o `database_id` em `wrangler.jsonc` e cadastre os segredos `PIMENTA` e `CHAVE_DADOS` no Worker. Sem esses segredos, o catálogo abre e o login fica travado.
+Para outra conta: crie o banco D1 `atacado-seguro`, coloque o `database_id` em `wrangler.jsonc` e cadastre os segredos `PIMENTA` e `CHAVE_DADOS` no Worker. Crie também um widget do Turnstile (modo Managed, com o endereço do Worker), ajuste `TURNSTILE_HOSTNAMES` em `wrangler.jsonc` e cadastre `TURNSTILE_SITEKEY` e `TURNSTILE_SECRET` como segredos. Sem esses segredos, o catálogo abre e o login fica travado.
 
 Desenvolvi este projeto e usei o Claude, da Anthropic, como ferramenta durante o desenvolvimento.

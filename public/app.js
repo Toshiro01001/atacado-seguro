@@ -2,6 +2,8 @@
 (function () {
   var $ = function (id) { return document.getElementById(id); };
   var csrf = null, usuario = null, produtos = [];
+  var robo = { chave: null, id: null, token: null, carregado: false };
+  var SEM_ROBO = 'O login está desligado enquanto eu termino de configurar a proteção contra robôs.';
   function el(tag, cls, txt) { var e = document.createElement(tag); if (cls) e.className = cls; if (txt !== undefined && txt !== null) e.textContent = txt; return e; }
   function rs(c) { return (c / 100).toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' }); }
   var ROT = { recebido: 'Recebido', separando: 'Separando', enviado: 'Enviado', cancelado: 'Cancelado' };
@@ -116,6 +118,7 @@
     $('f-login').hidden = logado;
     document.querySelector('.atalhos').hidden = logado;
     document.querySelector('.atalhos-t').hidden = logado;
+    $('robo').hidden = logado;
     $('logado').hidden = !logado;
     $('t-acesso').textContent = logado ? 'Sessão' : 'Entrar';
     $('s-pedidos').hidden = !logado;
@@ -133,16 +136,44 @@
     await carregarPerfil();
     if (usuario.papel === 'gestor') await carregarRegistro();
   }
+  /* Turnstile: um widget para o formulário e para os botões das contas públicas */
+  function prepararRobo(chave) {
+    if (robo.carregado) return;
+    robo.chave = chave || null;
+    if (!robo.chave) { $('verificacao').hidden = true; $('m-robo').textContent = SEM_ROBO; return; }
+    robo.carregado = true;
+    $('m-robo').textContent = 'Conferindo se você não é um robô. Leva só um instante.';
+    window.aoCarregarTurnstile = function () {
+      robo.id = window.turnstile.render('#verificacao', {
+        sitekey: robo.chave, action: 'login', language: 'pt-br', theme: 'light',
+        callback: function (t) { robo.token = t; $('m-robo').textContent = ''; },
+        'expired-callback': function () { robo.token = null; $('m-robo').textContent = 'A verificação expirou. Ela vai se refazer sozinha.'; window.turnstile.reset(robo.id); },
+        'error-callback': function () { robo.token = null; $('m-robo').textContent = 'A verificação contra robôs falhou. Recarregue a página e tente de novo.'; },
+      });
+    };
+    var sc = document.createElement('script');
+    sc.src = 'https://challenges.cloudflare.com/turnstile/v0/api.js?render=explicit&onload=aoCarregarTurnstile';
+    sc.async = true;
+    sc.onerror = function () { $('m-robo').textContent = 'Não consegui carregar a proteção contra robôs. Confira a conexão e recarregue a página.'; };
+    document.head.appendChild(sc);
+  }
+  function renovarRobo() {
+    robo.token = null;
+    if (robo.id !== null && window.turnstile) window.turnstile.reset(robo.id);
+  }
   async function entrar(email, senha, btn) {
     $('e-login').textContent = '';
+    if (!robo.chave) { $('e-login').textContent = SEM_ROBO; return; }
+    if (!robo.token) { $('e-login').textContent = 'Espere a verificação contra robôs terminar e tente de novo.'; return; }
+    var token = robo.token;
     ocupado(btn, true);
     try {
-      var d = await api('POST', '/api/login', { email: email, senha: senha });
+      var d = await api('POST', '/api/login', { email: email, senha: senha, turnstile: token });
       usuario = d.usuario; csrf = d.csrf;
       $('senha').value = '';
       await aplicarSessao();
     } catch (e) { $('e-login').textContent = e.message; }
-    finally { ocupado(btn, false); }
+    finally { ocupado(btn, false); renovarRobo(); }
   }
 
   $('f-login').addEventListener('submit', function (ev) {
@@ -198,6 +229,7 @@
     try {
       var s = await api('GET', '/api/sessao');
       if (s.usuario) { usuario = s.usuario; csrf = s.csrf; }
+      prepararRobo(s.turnstile);
       await aplicarSessao();
     } catch (e) { $('m-pedido').className = 'msg ruim'; $('m-pedido').textContent = e.message; }
   })();

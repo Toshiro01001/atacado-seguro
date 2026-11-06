@@ -1,6 +1,8 @@
 // Atacado Seguro: API em Cloudflare Workers com banco D1.
 // Dados fictícios. Regras: consultas parametrizadas, sessão em cookie protegido,
-// CSRF, papéis, campos cifrados e registro de acesso.
+// CSRF, papéis, campos cifrados, registro de acesso, Turnstile no login e erros no Sentry.
+import * as Sentry from '@sentry/cloudflare';
+
 const cod = new TextEncoder();
 const dec = new TextDecoder();
 const CABECALHOS = {
@@ -21,6 +23,9 @@ const MAX_FALHAS_CONTA = 30;
 const MAX_ITENS = 30;
 const MAX_CORPO = 16 * 1024;
 const NOME_COOKIE = '__Host-sessao';
+const SITEVERIFY = 'https://challenges.cloudflare.com/turnstile/v0/siteverify';
+const MSG_ROBO = 'Não consegui confirmar que você não é um robô. Espere a verificação terminar e tente de novo.';
+let avisouSemTurnstile = false;
 
 class ErroApi extends Error {
   constructor(status, codigo, mensagem) { super(mensagem); this.status = status; this.codigo = codigo; }
@@ -141,9 +146,41 @@ function texto(v, min, max, msg) {
 function mascarar(v) { if (!v) return null; const d = v.replace(/\D/g, ''); return d.length < 4 ? '****' : `****${d.slice(-2)}`; }
 
 /* rotas */
+/* Turnstile: confere no Siteverify antes de tocar no banco ou derivar a senha */
+function turnstileConfigurado(env) {
+  return Boolean(env.TURNSTILE_SITEKEY && env.TURNSTILE_SECRET && env.TURNSTILE_HOSTNAMES);
+}
+function enderecoSiteverify(env) {
+  // Só os testes locais trocam o endereço, e só para um servidor na própria máquina.
+  const u = env.TURNSTILE_URL || '';
+  return /^http:\/\/(127\.0\.0\.1|localhost)(:\d+)?\//.test(u) ? u : SITEVERIFY;
+}
+async function conferirHumano(env, req, token) {
+  if (!turnstileConfigurado(env)) {
+    if (!avisouSemTurnstile) { avisouSemTurnstile = true; Sentry.captureMessage('Turnstile sem configuração: login desligado', 'warning'); }
+    throw new ErroApi(503, 'configuracao', 'O login está desligado enquanto eu termino de configurar a proteção contra robôs.');
+  }
+  if (typeof token !== 'string' || token.length === 0 || token.length > 2048) throw new ErroApi(403, 'verificacao', MSG_ROBO);
+  const corpo = new URLSearchParams({ secret: env.TURNSTILE_SECRET, response: token });
+  const ip = req.headers.get('CF-Connecting-IP');
+  if (ip) corpo.set('remoteip', ip);
+  let r;
+  try {
+    const f = await fetch(enderecoSiteverify(env), { method: 'POST', headers: { 'Content-Type': 'application/x-www-form-urlencoded' }, body: corpo, signal: AbortSignal.timeout(10000) });
+    if (!f.ok) throw new Error('siteverify respondeu ' + f.status);
+    r = await f.json();
+  } catch (e) {
+    Sentry.captureException(e);
+    throw new ErroApi(503, 'verificacao_fora', 'Não consegui falar com a proteção contra robôs agora. Tente de novo em instantes.');
+  }
+  const hosts = new Set(String(env.TURNSTILE_HOSTNAMES).split(',').map((h) => h.trim()).filter(Boolean));
+  if (!r || r.success !== true || r.action !== 'login' || !hosts.has(r.hostname)) throw new ErroApi(403, 'verificacao', MSG_ROBO);
+}
+
 async function login(env, req, c) {
   conferirOrigem(req);
   const b = await lerJson(req);
+  await conferirHumano(env, req, b.turnstile);
   const email = texto(b.email, 3, 120, 'E-mail ou senha incorretos.').toLowerCase();
   const senha = texto(b.senha, 1, 200, 'E-mail ou senha incorretos.');
   const desde = Date.now() - JANELA_MS;
@@ -280,7 +317,8 @@ async function tratar(req, env) {
   if (rota === '/api/login' && m === 'POST') return login(env, req, c);
   await carregarSessao(env, req, c);
   if (rota === '/api/sessao' && m === 'GET') {
-    return resposta(c.usuario ? { usuario: { nome: c.usuario.nome, email: c.usuario.email, papel: c.usuario.papel }, csrf: c.csrf } : { usuario: null });
+    const turnstile = turnstileConfigurado(env) ? env.TURNSTILE_SITEKEY : null;
+    return resposta(c.usuario ? { usuario: { nome: c.usuario.nome, email: c.usuario.email, papel: c.usuario.papel }, csrf: c.csrf, turnstile } : { usuario: null, turnstile });
   }
   if (rota === '/api/logout' && m === 'POST') return sair(env, req, c);
   if (rota === '/api/pedidos' && m === 'GET') return listarPedidos(env, c);
@@ -308,15 +346,44 @@ async function faxina(env) {
   await env.DB.batch(lote);
 }
 
-export default {
+/* Sentry: só erros e 10% dos rastros, sem dados pessoais */
+const CAB_SENSIVEIS = /cookie|authorization|csrf|cf-connecting-ip|x-forwarded-for|x-real-ip|true-client-ip|cf-ipcountry|cf-ray/i;
+function limparEvento(ev) {
+  if (ev.request) {
+    delete ev.request.cookies;
+    delete ev.request.data;
+    delete ev.request.query_string;
+    delete ev.request.env;
+    if (ev.request.headers) for (const k of Object.keys(ev.request.headers)) if (CAB_SENSIVEIS.test(k)) delete ev.request.headers[k];
+  }
+  delete ev.user;
+  if (ev.contexts && ev.contexts.cloud_resource) delete ev.contexts.cloud_resource;
+  return ev;
+}
+function opcoesSentry(env) {
+  if (!env.SENTRY_DSN) return undefined;
+  return {
+    dsn: env.SENTRY_DSN,
+    environment: env.SENTRY_AMBIENTE || 'producao',
+    sendDefaultPii: false,
+    tracesSampleRate: 0.1,
+    beforeSend: limparEvento,
+    beforeSendTransaction: limparEvento,
+  };
+}
+
+const app = {
   async fetch(req, env) {
     try {
       return await tratar(req, env);
     } catch (e) {
       if (e instanceof ErroApi) return resposta({ erro: e.message, codigo: e.codigo }, e.status);
+      Sentry.captureException(e);
       console.error(JSON.stringify({ evento: 'erro', nome: e.name, mensagem: String(e.message).slice(0, 200) }));
       return resposta({ erro: 'Erro interno. Tente de novo em instantes.', codigo: 'interno' }, 500);
     }
   },
   async scheduled(_e, env, ctx) { ctx.waitUntil(faxina(env)); },
 };
+
+export default Sentry.withSentry(opcoesSentry, app);

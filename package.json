@@ -9,5 +9,10 @@
     "publicar": "wrangler deploy",
     "testar": "node tests/e2e.mjs"
   },
-  "devDependencies": { "wrangler": "4.158.0" }
+  "devDependencies": {
+    "wrangler": "4.158.0"
+  },
+  "dependencies": {
+    "@sentry/cloudflare": "11.8.0"
+  }
 }
