@@ -1,0 +1,4 @@
+-- Contas públicas de demonstração, com senhas publicadas na própria página.
+INSERT INTO usuarios (email, nome, papel, salt, senha_hash, iteracoes, com_pimenta, demo) VALUES ('cliente@exemplo.com.br', 'Mercado Exemplo Ltda (fictício)', 'cliente', 'fifCAmNXEpj09f0tB5HZWQ==', 'fj/EHAQ/BW2rX8S3sXYvxDqgL3wH6vd6t9XHwYitQ8Q=', 100000, 0, 1);
+INSERT INTO usuarios (email, nome, papel, salt, senha_hash, iteracoes, com_pimenta, demo) VALUES ('outra.loja@exemplo.com.br', 'Outra Loja Exemplo (fictícia)', 'cliente', 'uWYbdIcgBtc75KUrNopSZQ==', '5kzC6+UgANZ1GnfiQ7QtmRxzGWvZojnIoiFc2gS/oL4=', 100000, 0, 1);
+INSERT INTO usuarios (email, nome, papel, salt, senha_hash, iteracoes, com_pimenta, demo) VALUES ('gestor@exemplo.com.br', 'Gestor de Exemplo', 'gestor', '6crIY15ZWHQ0LHNdBjmlxw==', 'VD+Q2ChUkBqt7qtkis6y0wEDit/33FEmgEXyuQiuNV0=', 100000, 0, 1);

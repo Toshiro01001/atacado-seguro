@@ -1,0 +1,120 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Atacado Seguro: sistema real com banco de dados</title>
+<meta name="description" content="Demonstração de um sistema de atacado com login, papéis, banco de dados, dados cifrados e registro de acesso. Empresa e dados fictícios.">
+<link rel="icon" href="data:,">
+<link rel="stylesheet" href="estilo.css">
+</head>
+<body>
+<div class="faixa"><p>Demonstração com empresa e dados fictícios, em um servidor de verdade. Não digite dados reais. Os dados de teste são apagados todo dia.</p></div>
+<header class="cab">
+  <div>
+    <p class="marca">Atacado Seguro</p>
+    <h1>Um atacado com servidor, banco e porta trancada</h1>
+    <p class="lead">Aqui os dados não ficam no navegador. Cada pedido passa pelo servidor, que confere quem é você, o que pode fazer, e anota tudo.</p>
+  </div>
+  <section id="acesso" class="acesso" aria-labelledby="t-acesso">
+    <h2 id="t-acesso">Entrar</h2>
+    <form id="f-login" novalidate>
+      <label for="email">E-mail</label>
+      <input id="email" type="email" autocomplete="username" maxlength="120" required>
+      <label for="senha">Senha</label>
+      <input id="senha" type="password" autocomplete="current-password" maxlength="200" required>
+      <button type="submit" class="forte">Entrar</button>
+    </form>
+    <p class="atalhos-t">Contas públicas de teste:</p>
+    <div class="atalhos">
+      <button type="button" data-e="cliente@exemplo.com.br" data-s="demonstracao-cliente">Cliente</button>
+      <button type="button" data-e="outra.loja@exemplo.com.br" data-s="demonstracao-outra-loja">Outra loja</button>
+      <button type="button" data-e="gestor@exemplo.com.br" data-s="demonstracao-gestor">Gestor</button>
+    </div>
+    <p id="e-login" class="erro" role="alert"></p>
+    <div id="logado" hidden>
+      <p>Você entrou como <b id="u-nome"></b>, com o papel de <b id="u-papel"></b>.</p>
+      <button type="button" id="sair">Sair</button>
+    </div>
+  </section>
+</header>
+<main>
+  <section class="bloco" aria-labelledby="t-cat">
+    <h2 id="t-cat">Catálogo</h2>
+    <div class="rola" tabindex="0" role="region" aria-label="Tabela de produtos"><table>
+      <caption class="so-leitor">Produtos com preço e estoque</caption>
+      <thead><tr><th scope="col">Código</th><th scope="col">Produto</th><th scope="col">Preço</th><th scope="col">Estoque</th><th scope="col" class="col-q">Quantidade</th></tr></thead>
+      <tbody id="produtos"></tbody>
+    </table></div>
+    <div class="pedido-barra">
+      <p id="total" role="status">Total do pedido: R$ 0,00</p>
+      <button type="button" id="enviar" class="forte">Enviar pedido</button>
+    </div>
+    <p id="m-pedido" class="msg" role="status"></p>
+  </section>
+
+  <section id="s-pedidos" class="bloco" aria-labelledby="t-ped" hidden>
+    <h2 id="t-ped">Pedidos</h2>
+    <p id="d-ped" class="sub"></p>
+    <ul id="pedidos" class="lista"></ul>
+    <h3>Tentar abrir um pedido pelo número</h3>
+    <p class="sub">Um cliente não pode ver pedido de outra loja, mesmo sabendo o número.</p>
+    <div class="linha">
+      <label for="num">Número do pedido</label>
+      <input id="num" type="number" min="1" step="1" inputmode="numeric">
+      <button type="button" id="abrir-num">Abrir</button>
+    </div>
+    <p id="r-num" class="msg" role="status"></p>
+  </section>
+
+  <section id="s-perfil" class="bloco claro" aria-labelledby="t-per" hidden>
+    <h2 id="t-per">Dados cifrados</h2>
+    <p class="sub">Escreva dados fictícios. O servidor cifra cada campo antes de gravar, com uma chave que não fica no banco.</p>
+    <div class="duas">
+      <div>
+        <label for="doc">Documento fictício</label>
+        <input id="doc" maxlength="40" autocomplete="off">
+        <label for="tel">Telefone fictício</label>
+        <input id="tel" maxlength="30" autocomplete="off">
+        <button type="button" id="salvar" class="forte">Salvar cifrado</button>
+        <p id="m-perfil" class="msg" role="status"></p>
+      </div>
+      <div class="no-banco">
+        <h3>O que está gravado no banco</h3>
+        <pre id="banco" tabindex="0" aria-label="Campos cifrados no banco">Nada gravado ainda.</pre>
+      </div>
+    </div>
+  </section>
+
+  <section id="s-registro" class="bloco" aria-labelledby="t-reg" hidden>
+    <h2 id="t-reg">Registro de acesso</h2>
+    <p class="sub">Só o gestor vê. Mostra quem fez o quê e quando, sem senhas e sem o endereço IP aberto.</p>
+    <div class="rola" tabindex="0" role="region" aria-label="Tabela do registro de acesso"><table>
+      <caption class="so-leitor">Registro de acesso, do mais novo para o mais antigo</caption>
+      <thead><tr><th scope="col">Quando</th><th scope="col">Quem</th><th scope="col">Ação</th><th scope="col">Resultado</th><th scope="col">Alvo</th></tr></thead>
+      <tbody id="registro"></tbody>
+    </table></div>
+  </section>
+
+  <section class="bloco claro" aria-labelledby="t-como">
+    <h2 id="t-como">Como isto funciona</h2>
+    <div class="duas">
+      <ul class="pontos">
+        <li><b>Banco restrito.</b> O navegador nunca fala com o banco. Ele chama a API, que usa consultas parametrizadas.</li>
+        <li><b>Sessão protegida.</b> O cookie é HttpOnly, Secure e SameSite=Strict. O banco guarda só o hash do token.</li>
+        <li><b>Senhas.</b> PBKDF2 com salt próprio, mais uma pimenta guardada fora do banco.</li>
+        <li><b>Papéis.</b> O servidor confere cliente e gestor em cada pedido, sem confiar na tela.</li>
+      </ul>
+      <ul class="pontos">
+        <li><b>Campos cifrados.</b> AES-256-GCM, com a chave em um segredo do servidor.</li>
+        <li><b>Registro de acesso.</b> Logins, negativas e mudanças ficam anotados por 30 dias.</li>
+        <li><b>Cópia de segurança.</b> O banco volta a qualquer minuto dos últimos 30 dias, e um comando exporta uma cópia para guardar fora dele.</li>
+        <li><b>Estoque.</b> Um pedido sem estoque é desfeito por inteiro, sem deixar reserva pela metade.</li>
+      </ul>
+    </div>
+  </section>
+</main>
+<footer class="rodape"><p>Demonstração feita por <a href="https://mileumalinhas.com.br/">Mil e Uma Linhas!</a></p></footer>
+<script src="app.js"></script>
+</body>
+</html>

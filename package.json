@@ -1,0 +1,13 @@
+{
+  "name": "atacado-seguro",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev": "wrangler dev",
+    "banco:local": "wrangler d1 migrations apply atacado-seguro --local",
+    "banco:remoto": "wrangler d1 migrations apply atacado-seguro --remote",
+    "publicar": "wrangler deploy",
+    "testar": "node tests/e2e.mjs"
+  },
+  "devDependencies": { "wrangler": "4.158.0" }
+}
