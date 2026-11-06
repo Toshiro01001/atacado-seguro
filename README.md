@@ -1,5 +1,7 @@
 # Atacado Seguro
 
+![Painel do gestor no Atacado Seguro](docs/tela.webp)
+
 Demonstração de um sistema de atacado com servidor de verdade, em Cloudflare Workers e banco D1. Empresa, produtos e dados são fictícios. As contas de teste são públicas e estão na própria página.
 
 ## O que ele mostra
@@ -39,4 +41,4 @@ Testes: com o servidor local no ar, `BASE=http://localhost:8787 npm run testar`.
 2. Cadastre os segredos `PIMENTA` e `CHAVE_DADOS` no Worker.
 3. Rode `npm run banco:remoto` e `npm run publicar`.
 
-Desenvolvido por Rodrigo Terroso Junior. O Claude, da Anthropic, foi usado como ferramenta durante o desenvolvimento.
+Desenvolvi este projeto e usei o Claude, da Anthropic, como ferramenta durante o desenvolvimento.
