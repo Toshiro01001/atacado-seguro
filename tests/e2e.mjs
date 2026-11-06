@@ -156,6 +156,22 @@ for (const [nome, ctx] of [['computador', { viewport: { width: 1366, height: 800
 }
 await b.close();
 
+/* achados da vistoria de 06/11 */
+r = await req('GET', '/api/saude');
+c(r.s === 200 && r.j.ok === true, 'saúde responde');
+c((r.h.get('permissions-policy') || '').includes('camera=()'), 'Permissions-Policy na API');
+const cc = await entrar('cliente@exemplo.com.br', 'demonstracao-cliente');
+r = await req('POST', '/api/pedidos', { cookie: cc.cookie, csrf: '!'.repeat(cc.csrf.length), corpo: { itens: [{ produto_id: 1, quantidade: 1 }] } });
+c(r.s === 403, 'CSRF malformado dá 403, veio ' + r.s);
+const juntos = await Promise.all(Array.from({ length: 8 }, () => req('POST', '/api/pedidos', { cookie: cc.cookie, csrf: cc.csrf, corpo: { itens: [{ produto_id: 2, quantidade: 1 }, { produto_id: 3, quantidade: 1 }] } })));
+c(juntos.every((x) => x.s === 201), 'pedidos simultâneos: ' + juntos.map((x) => x.s).join(','));
+c(new Set(juntos.map((x) => x.j && x.j.id)).size === 8, 'pedidos simultâneos com números diferentes');
+for (const x of juntos) { const dt = await req('GET', `/api/pedidos/${x.j.id}`, { cookie: cc.cookie }); c(dt.s === 200 && dt.j.itens.length === 2, 'pedido simultâneo com os próprios itens'); }
+r = await fetch(BASE + '/nao-existe');
+c(r.status === 404 && (await r.text()).includes('Página não encontrada'), 'página 404');
+r = await fetch(BASE + '/favicon.svg'); c(r.status === 200, 'favicon');
+r = await fetch(BASE + '/og.png'); c(r.status === 200, 'imagem de compartilhamento');
+
 /* faxina pelo agendamento */
 r = await fetch(BASE + '/__scheduled?cron=17+7+*+*+*');
 c(r.status === 200, 'faxina respondeu');

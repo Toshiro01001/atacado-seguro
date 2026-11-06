@@ -12,6 +12,7 @@ const CABECALHOS = {
   'Strict-Transport-Security': 'max-age=31536000',
   'Content-Security-Policy': "default-src 'none'; frame-ancestors 'none'",
   'Cross-Origin-Resource-Policy': 'same-origin',
+  'Permissions-Policy': 'camera=(), microphone=(), geolocation=(), payment=()',
 };
 const SESSAO_S = 8 * 60 * 60;
 const JANELA_MS = 15 * 60 * 1000;
@@ -32,7 +33,8 @@ function deB64(t) { return Uint8Array.from(atob(t), (c) => c.charCodeAt(0)); }
 function aleatorio(n) { return crypto.getRandomValues(new Uint8Array(n)); }
 async function sha256(t) { return b64(await crypto.subtle.digest('SHA-256', cod.encode(t))); }
 function iguais(a, b) {
-  const x = deB64(a), y = deB64(b);
+  let x, y;
+  try { x = deB64(a); y = deB64(b); } catch (e) { return false; }
   return x.byteLength === y.byteLength && crypto.subtle.timingSafeEqual(x, y);
 }
 function iteracoes(env) {
@@ -41,7 +43,7 @@ function iteracoes(env) {
   return n;
 }
 function exigeSegredo(env, nome) {
-  if (!env[nome] || env[nome].length < 32) throw new ErroApi(500, 'config', 'Sistema sem chaves configuradas.');
+  if (!env[nome] || env[nome].length < 32) throw new ErroApi(500, 'config', 'Login indisponível: as chaves do servidor ainda não foram configuradas.');
   return env[nome];
 }
 
@@ -64,7 +66,7 @@ async function conferirSenha(env, u, senha) {
 /* campos cifrados: AES-256-GCM, com o id do usuário como dado autenticado */
 async function chaveDados(env) {
   const bruta = deB64(exigeSegredo(env, 'CHAVE_DADOS'));
-  if (bruta.byteLength !== 32) throw new ErroApi(500, 'config', 'Sistema sem chaves configuradas.');
+  if (bruta.byteLength !== 32) throw new ErroApi(500, 'config', 'Dados cifrados indisponíveis: a chave do servidor está em formato errado.');
   return crypto.subtle.importKey('raw', bruta, 'AES-GCM', false, ['encrypt', 'decrypt']);
 }
 async function cifrar(env, texto, contexto) {
@@ -86,6 +88,7 @@ async function origemHash(env, req) {
   return (await sha256(`${exigeSegredo(env, 'PIMENTA')}|${ip}`)).slice(0, 22);
 }
 async function registrar(env, c, acao, resultado, alvo = null) {
+  c.origem ??= await origemHash(env, c.req);
   await env.DB.prepare('INSERT INTO registro_acesso (quando, usuario_id, acao, resultado, alvo, origem_hash) VALUES (?,?,?,?,?,?)')
     .bind(Date.now(), c.usuario ? c.usuario.id : (c.usuarioId || null), acao, resultado, alvo, c.origem).run();
 }
@@ -144,6 +147,7 @@ async function login(env, req, c) {
   const email = texto(b.email, 3, 120, 'E-mail ou senha incorretos.').toLowerCase();
   const senha = texto(b.senha, 1, 200, 'E-mail ou senha incorretos.');
   const desde = Date.now() - JANELA_MS;
+  c.origem ??= await origemHash(env, req);
   const porOrigem = await env.DB.prepare("SELECT COUNT(*) n FROM registro_acesso WHERE origem_hash = ? AND acao = 'login' AND resultado = 'falha' AND quando > ?").bind(c.origem, desde).first();
   if (porOrigem.n >= MAX_FALHAS_ORIGEM) { await registrar(env, c, 'login', 'bloqueado'); throw new ErroApi(429, 'tentativas', 'Muitas tentativas. Espere 15 minutos.'); }
   const u = await env.DB.prepare('SELECT * FROM usuarios WHERE email = ?').bind(email).first();
@@ -190,16 +194,16 @@ async function criarPedido(env, req, c) {
   if (ps.length !== b.itens.length) throw new ErroApi(422, 'itens', 'Produto inexistente.');
   const preco = new Map(ps.map((p) => [p.id, p.preco_centavos]));
   const total = b.itens.reduce((s, i) => s + preco.get(i.produto_id) * i.quantidade, 0);
-  const novo = await env.DB.prepare('SELECT COALESCE(MAX(id),0)+1 n FROM pedidos').first();
-  const id = novo.n;
-  const lote = [env.DB.prepare('INSERT INTO pedidos (id, usuario_id, total_centavos, criado_em) VALUES (?,?,?,?)').bind(id, c.usuario.id, total, Date.now())];
+  // O lote é uma transação: o banco escolhe o número, e os itens acham o pedido que acabou de nascer.
+  const lote = [env.DB.prepare('INSERT INTO pedidos (usuario_id, total_centavos, criado_em) VALUES (?,?,?) RETURNING id').bind(c.usuario.id, total, Date.now())];
   for (const i of b.itens) {
-    lote.push(env.DB.prepare('INSERT INTO itens_pedido (pedido_id, produto_id, quantidade, preco_centavos) VALUES (?,?,?,?)').bind(id, i.produto_id, i.quantidade, preco.get(i.produto_id)));
+    lote.push(env.DB.prepare('INSERT INTO itens_pedido (pedido_id, produto_id, quantidade, preco_centavos) VALUES ((SELECT MAX(id) FROM pedidos WHERE usuario_id = ?),?,?,?)').bind(c.usuario.id, i.produto_id, i.quantidade, preco.get(i.produto_id)));
     lote.push(env.DB.prepare('UPDATE produtos SET estoque = estoque - ? WHERE id = ?').bind(i.quantidade, i.produto_id));
   }
-  try { await env.DB.batch(lote); } catch (e) {
+  let id;
+  try { id = (await env.DB.batch(lote))[0].results[0].id; } catch (e) {
     await registrar(env, c, 'pedido', 'recusado');
-    if (/CHECK|constraint/i.test(String(e.message))) throw new ErroApi(409, 'estoque', 'Estoque insuficiente. Nada foi reservado.');
+    if (/CHECK/i.test(String(e.message))) throw new ErroApi(409, 'estoque', 'Estoque insuficiente. Nada foi reservado.');
     throw e;
   }
   await registrar(env, c, 'pedido', 'ok', `pedido:${id}`);
@@ -265,7 +269,12 @@ async function tratar(req, env) {
   const url = new URL(req.url);
   const rota = url.pathname;
   const m = req.method;
-  const c = { usuario: null, origem: await origemHash(env, req) };
+  if (!rota.startsWith('/api/')) {
+    // Só chega aqui o que não é arquivo estático: mostra a página 404 com os cabeçalhos dela.
+    const pagina = await env.ASSETS.fetch(new Request(new URL('/404', req.url)));
+    return new Response(pagina.body, { status: 404, headers: pagina.headers });
+  }
+  const c = { usuario: null, req };
   if (rota === '/api/saude' && m === 'GET') return resposta({ ok: true });
   if (rota === '/api/produtos' && m === 'GET') return listarProdutos(env);
   if (rota === '/api/login' && m === 'POST') return login(env, req, c);

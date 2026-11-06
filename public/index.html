@@ -3,21 +3,47 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>Atacado Seguro: sistema real com banco de dados</title>
+<title>Atacado Seguro: sistema de demonstração com banco de dados</title>
 <meta name="description" content="Demonstração de um sistema de atacado com login, papéis, banco de dados, dados cifrados e registro de acesso. Empresa e dados fictícios.">
-<link rel="icon" href="data:,">
+<meta name="theme-color" content="#0f3d3e">
+<meta property="og:type" content="website">
+<meta property="og:locale" content="pt_BR">
+<meta property="og:title" content="Atacado Seguro: sistema de demonstração">
+<meta property="og:description" content="Pedidos, papéis, dados cifrados e registro de acesso em um servidor de verdade. Empresa e dados fictícios.">
+<meta property="og:url" content="https://atacado-seguro.contato-aea.workers.dev/">
+<meta property="og:image" content="https://atacado-seguro.contato-aea.workers.dev/og.png">
+<meta name="twitter:card" content="summary_large_image">
+<link rel="canonical" href="https://atacado-seguro.contato-aea.workers.dev/">
+<link rel="icon" href="favicon.svg" type="image/svg+xml">
+<link rel="preload" href="fontes/archivo-latin-wdth-normal.woff2" as="font" type="font/woff2" crossorigin>
 <link rel="stylesheet" href="estilo.css">
 </head>
 <body>
-<div class="faixa"><p>Demonstração com empresa e dados fictícios, em um servidor de verdade. Não digite dados reais. Os dados de teste são apagados todo dia.</p></div>
+<a class="pular" href="#s-catalogo">Pular para o catálogo</a>
+<div class="faixa" role="note"><p>Demonstração com empresa e dados fictícios, em um servidor de verdade. Não digite dados reais. Os dados de teste são apagados todo dia.</p></div>
+<nav class="topo" aria-label="Seções">
+  <a class="marca" href="#s-catalogo">Atacado Seguro</a>
+  <div class="topo-links">
+    <a href="#s-catalogo">Catálogo</a>
+    <a href="#s-pedidos" data-sessao hidden>Pedidos</a>
+    <a href="#s-perfil" data-sessao hidden>Dados cifrados</a>
+    <a href="#s-registro" data-gestor hidden>Registro</a>
+    <a href="#s-como">Como funciona</a>
+  </div>
+</nav>
 <header class="cab">
   <div>
-    <p class="marca">Atacado Seguro</p>
     <h1>Um atacado com servidor, banco e porta trancada</h1>
     <p class="lead">Aqui os dados não ficam no navegador. Cada pedido passa pelo servidor, que confere quem é você, o que pode fazer, e anota tudo.</p>
   </div>
   <section id="acesso" class="acesso" aria-labelledby="t-acesso">
     <h2 id="t-acesso">Entrar</h2>
+    <p class="atalhos-t">Teste com uma conta pública:</p>
+    <div class="atalhos">
+      <button type="button" data-e="cliente@exemplo.com.br" data-s="demonstracao-cliente">Cliente</button>
+      <button type="button" data-e="outra.loja@exemplo.com.br" data-s="demonstracao-outra-loja">Outra loja</button>
+      <button type="button" data-e="gestor@exemplo.com.br" data-s="demonstracao-gestor">Gestor</button>
+    </div>
     <form id="f-login" novalidate>
       <label for="email">E-mail</label>
       <input id="email" type="email" autocomplete="username" maxlength="120" required>
@@ -25,26 +51,21 @@
       <input id="senha" type="password" autocomplete="current-password" maxlength="200" required>
       <button type="submit" class="forte">Entrar</button>
     </form>
-    <p class="atalhos-t">Contas públicas de teste:</p>
-    <div class="atalhos">
-      <button type="button" data-e="cliente@exemplo.com.br" data-s="demonstracao-cliente">Cliente</button>
-      <button type="button" data-e="outra.loja@exemplo.com.br" data-s="demonstracao-outra-loja">Outra loja</button>
-      <button type="button" data-e="gestor@exemplo.com.br" data-s="demonstracao-gestor">Gestor</button>
-    </div>
     <p id="e-login" class="erro" role="alert"></p>
     <div id="logado" hidden>
       <p>Você entrou como <b id="u-nome"></b>, com o papel de <b id="u-papel"></b>.</p>
+      <p id="guia" class="guia"></p>
       <button type="button" id="sair">Sair</button>
     </div>
   </section>
 </header>
 <main>
-  <section class="bloco" aria-labelledby="t-cat">
+  <section id="s-catalogo" class="bloco" aria-labelledby="t-cat">
     <h2 id="t-cat">Catálogo</h2>
-    <div class="rola" tabindex="0" role="region" aria-label="Tabela de produtos"><table>
+    <div class="rola" tabindex="0" role="region" aria-label="Tabela de produtos"><table class="vira" role="table">
       <caption class="so-leitor">Produtos com preço e estoque</caption>
-      <thead><tr><th scope="col">Código</th><th scope="col">Produto</th><th scope="col">Preço</th><th scope="col">Estoque</th><th scope="col" class="col-q">Quantidade</th></tr></thead>
-      <tbody id="produtos"></tbody>
+      <thead role="rowgroup"><tr role="row"><th scope="col" role="columnheader">Código</th><th scope="col" role="columnheader">Produto</th><th scope="col" role="columnheader" class="num">Preço</th><th scope="col" role="columnheader" class="num">Estoque</th><th scope="col" role="columnheader" class="col-q">Quantidade</th></tr></thead>
+      <tbody id="produtos" role="rowgroup"></tbody>
     </table></div>
     <div class="pedido-barra">
       <p id="total" role="status">Total do pedido: R$ 0,00</p>
@@ -62,7 +83,7 @@
     <div class="linha">
       <label for="num">Número do pedido</label>
       <input id="num" type="number" min="1" step="1" inputmode="numeric">
-      <button type="button" id="abrir-num">Abrir</button>
+      <button type="button" id="abrir-num">Abrir pedido</button>
     </div>
     <p id="r-num" class="msg" role="status"></p>
   </section>
@@ -89,32 +110,35 @@
   <section id="s-registro" class="bloco" aria-labelledby="t-reg" hidden>
     <h2 id="t-reg">Registro de acesso</h2>
     <p class="sub">Só o gestor vê. Mostra quem fez o quê e quando, sem senhas e sem o endereço IP aberto.</p>
-    <div class="rola" tabindex="0" role="region" aria-label="Tabela do registro de acesso"><table>
+    <div class="rola" tabindex="0" role="region" aria-label="Tabela do registro de acesso"><table class="vira" role="table">
       <caption class="so-leitor">Registro de acesso, do mais novo para o mais antigo</caption>
-      <thead><tr><th scope="col">Quando</th><th scope="col">Quem</th><th scope="col">Ação</th><th scope="col">Resultado</th><th scope="col">Alvo</th></tr></thead>
-      <tbody id="registro"></tbody>
+      <thead role="rowgroup"><tr role="row"><th scope="col" role="columnheader">Quando</th><th scope="col" role="columnheader">Quem</th><th scope="col" role="columnheader">Ação</th><th scope="col" role="columnheader">Resultado</th><th scope="col" role="columnheader">Alvo</th></tr></thead>
+      <tbody id="registro" role="rowgroup"></tbody>
     </table></div>
   </section>
 
-  <section class="bloco claro" aria-labelledby="t-como">
-    <h2 id="t-como">Como isto funciona</h2>
-    <div class="duas">
-      <ul class="pontos">
-        <li><b>Banco restrito.</b> O navegador nunca fala com o banco. Ele chama a API, que usa consultas parametrizadas.</li>
-        <li><b>Sessão protegida.</b> O cookie é HttpOnly, Secure e SameSite=Strict. O banco guarda só o hash do token.</li>
-        <li><b>Senhas.</b> PBKDF2 com salt próprio, mais uma pimenta guardada fora do banco.</li>
-        <li><b>Papéis.</b> O servidor confere cliente e gestor em cada pedido, sem confiar na tela.</li>
-      </ul>
-      <ul class="pontos">
-        <li><b>Campos cifrados.</b> AES-256-GCM, com a chave em um segredo do servidor.</li>
-        <li><b>Registro de acesso.</b> Logins, negativas e mudanças ficam anotados por 30 dias.</li>
-        <li><b>Cópia de segurança.</b> O banco volta a qualquer minuto dos últimos 30 dias, e um comando exporta uma cópia para guardar fora dele.</li>
-        <li><b>Estoque.</b> Um pedido sem estoque é desfeito por inteiro, sem deixar reserva pela metade.</li>
-      </ul>
-    </div>
+  <section id="s-como" class="bloco claro" aria-labelledby="t-como">
+    <h2 id="t-como">Como funciona</h2>
+    <dl class="pontos">
+      <div><dt>Banco restrito</dt><dd>O navegador nunca fala com o banco. Ele chama a API, que usa consultas parametrizadas.</dd></div>
+      <div><dt>Sessão protegida</dt><dd>O cookie é HttpOnly, Secure e SameSite=Strict. O banco guarda só o hash do token.</dd></div>
+      <div><dt>Senhas</dt><dd>PBKDF2 com salt próprio, mais uma pimenta guardada fora do banco.</dd></div>
+      <div><dt>Papéis</dt><dd>O servidor confere cliente e gestor em cada pedido, sem confiar na tela.</dd></div>
+      <div><dt>Campos cifrados</dt><dd>AES-256-GCM, com a chave em um segredo do servidor.</dd></div>
+      <div><dt>Registro de acesso</dt><dd>Logins, negativas e mudanças ficam anotados por 30 dias.</dd></div>
+      <div><dt>Cópia de segurança</dt><dd>O banco volta a qualquer minuto dos últimos 30 dias, e um comando exporta uma cópia para guardar fora dele.</dd></div>
+      <div><dt>Estoque</dt><dd>Um pedido sem estoque é desfeito por inteiro, sem deixar reserva pela metade.</dd></div>
+    </dl>
+    <p class="limite">Nenhum sistema é impossível de invadir. Estas camadas reduzem o risco, e as limitações estão listadas no <a href="https://github.com/Toshiro01001/atacado-seguro#limitações-conhecidas">código aberto do projeto</a>.</p>
   </section>
 </main>
-<footer class="rodape"><p>Demonstração feita por <a href="https://mileumalinhas.com.br/">Mil e Uma Linhas!</a></p></footer>
+<footer class="rodape">
+  <div>
+    <p class="rodape-t">Quer um sistema assim na sua empresa?</p>
+    <p>Eu desenvolvo sob medida, e a vistoria de segurança entra no projeto.</p>
+  </div>
+  <p class="rodape-l"><a href="mailto:contato@mileumalinhas.com.br">contato@mileumalinhas.com.br</a><br><a href="https://mileumalinhas.com.br/">Mil e Uma Linhas!</a></p>
+</footer>
 <script src="app.js"></script>
 </body>
 </html>

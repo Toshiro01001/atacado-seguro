@@ -2,7 +2,16 @@
 
 ![Painel do gestor no Atacado Seguro](docs/tela.webp)
 
-Demonstração de um sistema de atacado com servidor de verdade, em Cloudflare Workers e banco D1. Empresa, produtos e dados são fictícios. As contas de teste são públicas e estão na própria página.
+**Ver funcionando:** https://atacado-seguro.contato-aea.workers.dev
+
+Fiz esta demonstração para mostrar um sistema de atacado com servidor de verdade, em Cloudflare Workers e banco D1. Empresa, produtos e dados são fictícios. As contas de teste são públicas e estão na própria página.
+
+## Como testar em dois minutos
+
+1. Entre como **Cliente**, escolha quantidades no catálogo e envie um pedido.
+2. Em **Dados cifrados**, salve um documento fictício e veja o texto cifrado que fica no banco.
+3. Entre como **Outra loja** e tente abrir o pedido anterior pelo número: o servidor nega.
+4. Entre como **Gestor**, mude a situação do pedido e veja tudo anotado no registro de acesso.
 
 ## O que ele mostra
 
@@ -15,7 +24,8 @@ Demonstração de um sistema de atacado com servidor de verdade, em Cloudflare W
 | Criptografia de campos | AES-256-GCM, com o campo e o usuário como dados autenticados |
 | Registro de acesso | Logins, negativas e mudanças, sem senhas e com o IP em hash, por 30 dias |
 | Cópia de segurança | Time Travel do D1 e `scripts/backup.sh` para exportar |
-| Cabeçalhos | HSTS, CSP, `frame-ancestors`, X-Frame-Options e outros em `public/_headers` e na API |
+| Cabeçalhos | HSTS, CSP, `frame-ancestors`, X-Frame-Options, Permissions-Policy e outros em `public/_headers` e na API |
+| Pedidos simultâneos | O número do pedido nasce dentro da transação, então vários pedidos ao mesmo tempo não se atrapalham |
 
 ## Limitações conhecidas
 
@@ -37,8 +47,8 @@ Testes: com o servidor local no ar, `BASE=http://localhost:8787 npm run testar`.
 
 ## Como publicar
 
-1. Crie o banco D1 `atacado-seguro` e coloque o `database_id` em `wrangler.jsonc`.
-2. Cadastre os segredos `PIMENTA` e `CHAVE_DADOS` no Worker.
-3. Rode `npm run banco:remoto` e `npm run publicar`.
+Cada envio na `main` publica pelo Workers Builds da Cloudflare, com `npx wrangler d1 migrations apply atacado-seguro --remote` na compilação e `npx wrangler deploy` na publicação.
+
+Para outra conta: crie o banco D1 `atacado-seguro`, coloque o `database_id` em `wrangler.jsonc` e cadastre os segredos `PIMENTA` e `CHAVE_DADOS` no Worker. Sem esses segredos, o catálogo abre e o login fica travado.
 
 Desenvolvi este projeto e usei o Claude, da Anthropic, como ferramenta durante o desenvolvimento.
