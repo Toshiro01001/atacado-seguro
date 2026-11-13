@@ -5,7 +5,7 @@
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Atacado Seguro: sistema de demonstração com banco de dados</title>
 <meta name="description" content="Demonstração de um sistema de atacado com login, papéis, banco de dados, dados cifrados e registro de acesso. Empresa e dados fictícios.">
-<meta name="theme-color" content="#0f3d3e">
+<meta name="theme-color" content="#163300">
 <meta property="og:type" content="website">
 <meta property="og:locale" content="pt_BR">
 <meta property="og:title" content="Atacado Seguro: sistema de demonstração">
@@ -35,6 +35,9 @@
   <div>
     <h1>Um atacado com servidor, banco e porta trancada</h1>
     <p class="lead">Aqui os dados não ficam no navegador. Cada pedido passa pelo servidor, que confere quem é você, o que pode fazer, e anota tudo.</p>
+    <div class="fluxo" role="img" aria-label="O navegador fala com o servidor, e só o servidor fala com o banco.">
+      <span class="no">Navegador</span><span class="fio"><i></i></span><span class="no no-meio">Servidor</span><span class="fio fio-2"><i></i></span><span class="no">Banco</span>
+    </div>
   </div>
   <section id="acesso" class="acesso" aria-labelledby="t-acesso">
     <h2 id="t-acesso">Entrar</h2>
@@ -78,9 +81,10 @@
     <p id="m-pedido" class="msg" role="status"></p>
   </section>
 
-  <section id="s-pedidos" class="bloco" aria-labelledby="t-ped" hidden>
+  <section id="s-pedidos" class="bloco nevoa" aria-labelledby="t-ped" hidden>
     <h2 id="t-ped">Pedidos</h2>
     <p id="d-ped" class="sub"></p>
+    <dl id="kpi-ped" class="kpis"></dl>
     <ul id="pedidos" class="lista"></ul>
     <h3>Tentar abrir um pedido pelo número</h3>
     <p class="sub">Um cliente não pode ver pedido de outra loja, mesmo sabendo o número.</p>
@@ -111,9 +115,10 @@
     </div>
   </section>
 
-  <section id="s-registro" class="bloco" aria-labelledby="t-reg" hidden>
+  <section id="s-registro" class="bloco nevoa" aria-labelledby="t-reg" hidden>
     <h2 id="t-reg">Registro de acesso</h2>
     <p class="sub">Só o gestor vê. Mostra quem fez o quê e quando, sem senhas e sem o endereço IP aberto.</p>
+    <dl id="kpi-reg" class="kpis"></dl>
     <div class="rola" tabindex="0" role="region" aria-label="Tabela do registro de acesso"><table class="vira" role="table">
       <caption class="so-leitor">Registro de acesso, do mais novo para o mais antigo</caption>
       <thead role="rowgroup"><tr role="row"><th scope="col" role="columnheader">Quando</th><th scope="col" role="columnheader">Quem</th><th scope="col" role="columnheader">Ação</th><th scope="col" role="columnheader">Resultado</th><th scope="col" role="columnheader">Alvo</th></tr></thead>
@@ -121,7 +126,7 @@
     </table></div>
   </section>
 
-  <section id="s-como" class="bloco claro" aria-labelledby="t-como">
+  <section id="s-como" class="bloco floresta" aria-labelledby="t-como">
     <h2 id="t-como">Como funciona</h2>
     <dl class="pontos">
       <div><dt>Banco restrito</dt><dd>O navegador nunca fala com o banco. Ele chama a API, que usa consultas parametrizadas.</dd></div>
@@ -141,7 +146,7 @@
     <p class="rodape-t">Quer um sistema assim na sua empresa?</p>
     <p>Eu desenvolvo sob medida, e a vistoria de segurança entra no projeto.</p>
   </div>
-  <p class="rodape-l"><a href="mailto:contato@mileumalinhas.com.br">contato@mileumalinhas.com.br</a><br><a href="https://mileumalinhas.com.br/">Mil e Uma Linhas!</a></p>
+  <p class="rodape-l"><a class="rodape-botao" href="mailto:contato@mileumalinhas.com.br">contato@mileumalinhas.com.br</a><a href="https://mileumalinhas.com.br/">Mil e Uma Linhas!</a></p>
 </footer>
 <script src="app.js"></script>
 </body>
