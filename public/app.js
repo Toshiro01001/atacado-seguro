@@ -46,7 +46,11 @@
       var q = celula('Quantidade', 'col-q'), i = el('input');
       i.type = 'number'; i.min = '0'; i.max = '9999'; i.step = '1'; i.inputMode = 'numeric'; i.dataset.id = p.id; i.value = valores[p.id] || '';
       i.setAttribute('aria-label', 'Quantidade de ' + p.nome);
-      q.appendChild(i); tr.appendChild(q);
+      var passo = el('span', 'passo'), menos = el('button', 'passo-b', '−'), mais = el('button', 'passo-b', '+');
+      menos.type = 'button'; mais.type = 'button'; menos.dataset.passo = '-1'; mais.dataset.passo = '1';
+      menos.setAttribute('aria-label', 'Tirar uma unidade de ' + p.nome); mais.setAttribute('aria-label', 'Colocar uma unidade de ' + p.nome);
+      passo.appendChild(menos); passo.appendChild(i); passo.appendChild(mais);
+      q.appendChild(passo); tr.appendChild(q);
       tb.appendChild(tr);
     });
     pintarTotal();
@@ -66,6 +70,7 @@
     }, 0);
     var un = itensEscolhidos().reduce(function (s, i) { return s + i.quantidade; }, 0);
     $('total').textContent = 'Total do pedido: ' + rs(t) + (un ? ', ' + un + (un === 1 ? ' unidade' : ' unidades') : '');
+    $('total').parentNode.classList.toggle('com-itens', un > 0);
     $('produtos').querySelectorAll('tr').forEach(function (l) { var c = l.querySelector('input'); l.classList.toggle('marcado', !!c && Number(c.value) > 0); });
   }
   async function carregarProdutos() { produtos = (await api('GET', '/api/produtos')).produtos; pintarProdutos(); }
@@ -75,9 +80,37 @@
     $('m-pedido').className = 'msg ruim'; $('m-pedido').textContent = msg;
   }
 
+  /* Números de resumo no alto de Pedidos e do Registro: sempre calculados do que o servidor devolveu. */
+  var CALMO = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+  function contar(no, alvo, formato) {
+    if (CALMO || !window.requestAnimationFrame) { no.textContent = formato(alvo); return; }
+    var t0 = null;
+    function quadro(t) {
+      if (t0 === null) t0 = t;
+      var k = Math.min(1, (t - t0) / 600), e = 1 - Math.pow(1 - k, 3);
+      no.textContent = formato(Math.round(alvo * e));
+      if (k < 1) requestAnimationFrame(quadro);
+    }
+    requestAnimationFrame(quadro);
+  }
+  function resumo(id, itens) {
+    var dl = $(id); dl.textContent = '';
+    itens.forEach(function (it) {
+      var d = el('div'), dd = el('dd', '', it.formato(it.valor));
+      d.appendChild(el('dt', '', it.rotulo)); d.appendChild(dd); dl.appendChild(d);
+      contar(dd, it.valor, it.formato);
+    });
+  }
+  var inteiro = function (n) { return n.toLocaleString('pt-BR'); };
+
   async function carregarPedidos() {
     var d = await api('GET', '/api/pedidos'), ul = $('pedidos'), gestor = usuario.papel === 'gestor';
     ul.textContent = '';
+    resumo('kpi-ped', [
+      { rotulo: 'Pedidos', valor: d.pedidos.length, formato: inteiro },
+      { rotulo: 'Valor somado', valor: d.pedidos.reduce(function (s, p) { return s + p.total_centavos; }, 0), formato: rs },
+      { rotulo: 'Em andamento', valor: d.pedidos.filter(function (p) { return p.situacao === 'recebido' || p.situacao === 'separando'; }).length, formato: inteiro },
+    ]);
     $('d-ped').textContent = gestor ? 'O gestor vê os pedidos de todas as lojas e muda a situação.' : 'Você vê só os pedidos desta loja.';
     if (!d.pedidos.length) ul.appendChild(el('li', 'vazio', gestor ? 'Nenhum pedido ainda. Entre como cliente e envie um para ver ele chegar aqui.' : 'Nenhum pedido ainda. Escolha quantidades no catálogo e envie o primeiro.'));
     d.pedidos.forEach(function (p) {
@@ -87,7 +120,7 @@
       if (gestor) {
         var s = el('select'); s.dataset.pedido = p.id; s.setAttribute('aria-label', 'Situação do pedido ' + p.id);
         Object.keys(ROT).forEach(function (k) { var o = el('option', '', ROT[k]); o.value = k; s.appendChild(o); });
-        s.value = p.situacao; li.appendChild(s);
+        s.value = p.situacao; s.className = 'sit-' + p.situacao; li.appendChild(s);
       } else li.appendChild(el('span', 'sit sit-' + p.situacao, ROT[p.situacao]));
       ul.appendChild(li);
     });
@@ -103,12 +136,18 @@
   async function carregarRegistro() {
     var d = await api('GET', '/api/registro'), tb = $('registro');
     tb.textContent = '';
+    resumo('kpi-reg', [
+      { rotulo: 'Eventos anotados', valor: d.registro.length, formato: inteiro },
+      { rotulo: 'Permitidos', valor: d.registro.filter(function (r) { return r.resultado === 'ok'; }).length, formato: inteiro },
+      { rotulo: 'Negados ou com falha', valor: d.registro.filter(function (r) { return r.resultado !== 'ok'; }).length, formato: inteiro },
+    ]);
     d.registro.forEach(function (r) {
       var tr = linhaTab(), ruim = r.resultado !== 'ok';
       tr.appendChild(celula('Quando', '', new Date(r.quando).toLocaleString('pt-BR', { dateStyle: 'short', timeStyle: 'medium' })));
       tr.appendChild(celula('Quem', '', r.usuario || 'Desconhecido'));
       tr.appendChild(celula('Ação', '', ACOES[r.acao] || r.acao));
-      tr.appendChild(celula('Resultado', 'res ' + (ruim ? 'res-ruim' : 'res-ok'), RES[r.resultado] || r.resultado));
+      var res = celula('Resultado', 'res'); res.appendChild(el('span', 'selo ' + (ruim ? 'selo-ruim' : 'selo-ok'), RES[r.resultado] || r.resultado));
+      tr.appendChild(res);
       tr.appendChild(celula('Alvo', '', alvoLegivel(r.alvo)));
       tb.appendChild(tr);
     });
@@ -187,6 +226,24 @@
     usuario = null; csrf = null; await aplicarSessao();
   });
   $('produtos').addEventListener('input', pintarTotal);
+  $('produtos').addEventListener('click', function (e) {
+    var b = e.target.closest('[data-passo]'); if (!b) return;
+    var c = b.parentNode.querySelector('input'), n = Math.max(0, Math.min(9999, (Number(c.value) || 0) + Number(b.dataset.passo)));
+    c.value = n ? String(n) : '';
+    pintarTotal();
+  });
+  /* A aba da seção que está na tela fica acesa no menu */
+  if ('IntersectionObserver' in window) {
+    var links = {};
+    document.querySelectorAll('.topo-links a').forEach(function (a) { links[a.getAttribute('href').slice(1)] = a; });
+    var vigia = new IntersectionObserver(function (es) {
+      es.forEach(function (x) {
+        if (!x.isIntersecting) return;
+        Object.keys(links).forEach(function (k) { links[k].classList.toggle('aqui', k === x.target.id); });
+      });
+    }, { rootMargin: '-45% 0px -50% 0px' });
+    Object.keys(links).forEach(function (k) { var s = $(k); if (s) vigia.observe(s); });
+  }
   $('enviar').addEventListener('click', async function () {
     var m = $('m-pedido'), its = itensEscolhidos();
     m.className = 'msg';
@@ -202,7 +259,7 @@
   });
   $('pedidos').addEventListener('change', async function (e) {
     if (!e.target.dataset.pedido) return;
-    try { await api('POST', '/api/pedidos/' + e.target.dataset.pedido + '/situacao', { situacao: e.target.value }); await carregarRegistro(); }
+    try { await api('POST', '/api/pedidos/' + e.target.dataset.pedido + '/situacao', { situacao: e.target.value }); e.target.className = 'sit-' + e.target.value; await carregarRegistro(); }
     catch (er) { $('d-ped').textContent = er.message; }
   });
   $('abrir-num').addEventListener('click', async function () {
